@@ -1,0 +1,11 @@
+go 1.27.1
+
+use (
+	./pkg
+	./services/api-gateway
+	./services/auth-service
+	./services/bonus-service
+	./services/game-service
+	./services/risk-service
+	./services/wallet-service
+)

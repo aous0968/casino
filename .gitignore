@@ -1,0 +1,38 @@
+# Binaries and build output
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+
+# Go workspace — local dev only, never commit
+# (see note below)
+# go.work
+# go.work.sum
+
+# Env files (never commit real values)
+.env
+.env.local
+.env.*.local
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Local DB data / dumps
+*.sql.gz
+pgdata/
