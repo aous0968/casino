@@ -72,7 +72,7 @@ func (r *Repo) FindByEmail(ctx context.Context, email string) (*User, error) {
 	return u, nil
 }
 
-func (r *Repo) FindById(ctx context.Context, id string) (*User, error) {
+func (r *Repo) FindByID(ctx context.Context, id string) (*User, error) {
 	const q = `
 		SELECT id, email, password_hash
 		FROM auth.users

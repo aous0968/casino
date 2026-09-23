@@ -12,6 +12,7 @@ import (
 	"github.com/aous0968/casino/pkg/httpx"
 	"github.com/aous0968/casino/services/auth-service/internal/password"
 	"github.com/aous0968/casino/services/auth-service/internal/token"
+	"github.com/aous0968/casino/services/auth-service/internal/auth"
 )
 
 type Handler struct {
@@ -279,4 +280,36 @@ func (h *Handler) issueTokens(r *http.Request, userID string) (*tokenResponse, e
 		TokenType:    "Bearer",
 		ExpiresIn:    int(h.accessTTL.Seconds()), // 15 minutes, keep in sync with config
 	}, nil
+}
+
+// ---------- Me ----------
+
+type meResponse struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+}
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	userID, ok := auth.UserIDFromContext(r.Context())
+	if !ok {
+		// This should be impossible if the middleware is wired correctly.
+		// Log it as a programming error.
+		h.log.Error("me: no user id in context")
+		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "")
+		return
+	}
+
+	u, err := h.repo.FindByID(r.Context(), userID)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			// Token is valid but user no longer exists (deleted account).
+			httpx.WriteError(w, http.StatusUnauthorized, "unauthorized", "user no longer exists")
+			return
+		}
+		h.log.Error("me: find user failed", "err", err)
+		httpx.WriteError(w, http.StatusInternalServerError, "internal_error", "")
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, meResponse{ID: u.ID, Email: u.Email})
 }

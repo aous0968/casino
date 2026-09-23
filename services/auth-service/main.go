@@ -17,6 +17,7 @@ import (
 	"github.com/aous0968/casino/pkg/postgres"
 	"github.com/aous0968/casino/services/auth-service/internal/user"
 	"github.com/aous0968/casino/services/auth-service/internal/token"
+	"github.com/aous0968/casino/services/auth-service/internal/auth"
 )
 
 func main() {
@@ -75,10 +76,17 @@ func run() error {
 		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
+	// Public routes
 	mux.HandleFunc("POST /register", userHandler.Register)
 	mux.HandleFunc("POST /login", userHandler.Login)
 	mux.HandleFunc("POST /refresh", userHandler.Refresh)
 	mux.HandleFunc("POST /logout", userHandler.Logout)
+
+	// Protected routes — wrapped in RequireAuth
+	protected := func(h http.HandlerFunc) http.Handler {
+		return auth.RequireAuth(signer, log, h)
+	}
+	mux.Handle("GET /me", protected(userHandler.Me))
 
 	// ---- HTTP server ----
 	srv := &http.Server{

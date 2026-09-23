@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -56,6 +58,10 @@ type RabbitMQConfig struct {
 }
 
 func Load() (*Config, error) {
+
+	_ = godotenv.Load(".env")
+	_ = godotenv.Load("../../.env")
+
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 
