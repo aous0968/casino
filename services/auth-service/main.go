@@ -16,6 +16,7 @@ import (
 	"github.com/aous0968/casino/pkg/logger"
 	"github.com/aous0968/casino/pkg/postgres"
 	"github.com/aous0968/casino/services/auth-service/internal/user"
+	"github.com/aous0968/casino/services/auth-service/internal/token"
 )
 
 func main() {
@@ -45,8 +46,16 @@ func run() error {
 	log.Info("postgres connected", "host", cfg.Postgres.Host, "db", cfg.Postgres.Database)
 
 	// ---- Wire dependencies ----
+	signer := token.NewSigner(cfg.JWT.Secret, cfg.JWT.Issuer, cfg.JWT.AccessTokenTTL)
+
 	userRepo := user.NewRepo(pool.Pool)
-	userHandler := user.NewHandler(userRepo, log)
+	userHandler := user.NewHandler(
+		userRepo,
+		log,
+		signer,
+		cfg.JWT.RefreshTokenTTL,
+		cfg.JWT.AccessTokenTTL,
+	)
 
 	// ---- Routes ----
 	mux := http.NewServeMux()
@@ -67,6 +76,9 @@ func run() error {
 	})
 
 	mux.HandleFunc("POST /register", userHandler.Register)
+	mux.HandleFunc("POST /login", userHandler.Login)
+	mux.HandleFunc("POST /refresh", userHandler.Refresh)
+	mux.HandleFunc("POST /logout", userHandler.Logout)
 
 	// ---- HTTP server ----
 	srv := &http.Server{

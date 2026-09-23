@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -14,6 +15,7 @@ type Config struct {
 	Postgres PostgresConfig
 	Redis    RedisConfig
 	RabbitMQ RabbitMQConfig
+	JWT      JWTConfig
 }
 
 type ServiceConfig struct {
@@ -28,6 +30,14 @@ type PostgresConfig struct {
 	Password string
 	Database string
 	MaxConns int32
+}
+
+
+type JWTConfig struct {
+	Secret          []byte
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+	Issuer          string
 }
 
 func (p PostgresConfig) DSN() string {
@@ -46,6 +56,9 @@ type RabbitMQConfig struct {
 }
 
 func Load() (*Config, error) {
+
+	jwtSecret := os.Getenv("JWT_SECRET")
+
 	cfg := &Config{
 		Env:      getEnv("APP_ENV", "local"),
 		LogLevel: getEnv("LOG_LEVEL", "info"),
@@ -67,6 +80,12 @@ func Load() (*Config, error) {
 		RabbitMQ: RabbitMQConfig{
 			URL: os.Getenv("RABBITMQ_URL"),
 		},
+		JWT: JWTConfig{
+			Secret:          []byte(jwtSecret),
+			AccessTokenTTL:  time.Duration(getEnvInt("JWT_ACCESS_TTL_MIN", 15)) * time.Minute,
+			RefreshTokenTTL: time.Duration(getEnvInt("JWT_REFRESH_TTL_DAYS", 30)) * 24 * time.Hour,
+			Issuer:          getEnv("JWT_ISSUER", "auth-service"),
+		},
 	}
 
 	var missing []string
@@ -78,6 +97,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.Postgres.Database == "" {
 		missing = append(missing, "POSTGRES_DB")
+	}
+	if len(jwtSecret) < 32 {
+		missing = append(missing, "JWT_SECRET (must be at least 32 characters)")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("missing required env vars: %s", strings.Join(missing, ", "))

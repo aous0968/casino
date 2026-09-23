@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -13,6 +14,7 @@ import (
 var (
 	ErrEmailTaken = errors.New("user: email already registered")
 	ErrNotFound   = errors.New("user: not found")
+	ErrTokenNotFound = errors.New("user: refresh token not found")
 )
 
 // User is the in-memory shape of a row in auth.users.
@@ -87,4 +89,66 @@ func (r *Repo) FindById(ctx context.Context, id string) (*User, error) {
 		return nil, fmt.Errorf("user: find by id: %w", err)
 	}
 	return u, nil
+}
+
+// StoreRefreshToken persists a refresh token's hash for the given user.
+// The raw token is never stored — only its SHA-256 hash.
+func (r *Repo) StoreRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+	const q = `
+		INSERT INTO auth.refresh_tokens (user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3)
+	`
+
+	if _, err := r.pool.Exec(ctx, q, userID, tokenHash, expiresAt); err != nil {
+		return fmt.Errorf("user: store refresh token: %w", err)
+	}
+	return nil
+}
+
+// RefreshToken is the in-memory shape of a row in auth.refresh_tokens.
+type RefreshToken struct {
+	ID        string
+	UserID    string
+	TokenHash string
+	ExpiresAt time.Time
+	RevokedAt *time.Time // nil if not revoked
+}
+
+// FindRefreshToken looks up an active token by hash.
+// Returns ErrTokenNotFound if the token doesn't exist, is revoked, or is expired.
+func (r *Repo) FindRefreshToken(ctx context.Context, tokenHash string) (*RefreshToken, error) {
+	const q = `
+		SELECT id, user_id, token_hash, expires_at, revoked_at
+		FROM auth.refresh_tokens
+		WHERE token_hash = $1
+		  AND revoked_at IS NULL
+		  AND expires_at > NOW()
+	`
+
+	t := &RefreshToken{}
+	err := r.pool.QueryRow(ctx, q, tokenHash).
+		Scan(&t.ID, &t.UserID, &t.TokenHash, &t.ExpiresAt, &t.RevokedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrTokenNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("user: find refresh token: %w", err)
+	}
+	return t, nil
+}
+
+// RevokeRefreshToken marks a token as revoked.
+// Idempotent: revoking an already-revoked or missing token is not an error.
+func (r *Repo) RevokeRefreshToken(ctx context.Context, tokenHash string) error {
+	const q = `
+		UPDATE auth.refresh_tokens
+		SET revoked_at = NOW()
+		WHERE token_hash = $1
+		  AND revoked_at IS NULL
+	`
+
+	if _, err := r.pool.Exec(ctx, q, tokenHash); err != nil {
+		return fmt.Errorf("user: revoke refresh token: %w", err)
+	}
+	return nil
 }
