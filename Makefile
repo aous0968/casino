@@ -17,6 +17,7 @@ help:
 	@echo "  make build              - build all services"
 	@echo "  make test               - run all tests"
 	@echo "  make fmt                - format all Go code"
+	@echo "  make run-api-gateway    - run api-gateway locally"
 	@echo "  make run-auth           - run auth-service locally"
 	@echo "  make migrate-auth-up    - apply auth migrations"
 	@echo "  make migrate-auth-down  - roll back one auth migration"
@@ -50,16 +51,14 @@ fmt:
 	@for mod in pkg services/*; do (cd $$mod && go fmt ./...); done
 
 # ---- Run one service locally ----
+# Usage: make run-api-gateway
+run-api-gateway:
+	cd services/api-gateway && \
+	  go run .
+
 # Usage: make run-auth
 run-auth:
 	cd services/auth-service && \
-	  APP_ENV=local \
-	  LOG_LEVEL=debug \
-	  SERVICE_NAME=auth-service \
-	  PORT=8081 \
-	  POSTGRES_USER=casino \
-	  POSTGRES_PASSWORD=casino \
-	  POSTGRES_DB=casino \
 	  go run .
 
 # ---- Migrations (auth) ----
