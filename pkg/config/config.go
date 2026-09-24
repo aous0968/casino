@@ -57,11 +57,25 @@ type RabbitMQConfig struct {
 	URL string
 }
 
-func Load() (*Config, error) {
+type Options struct {
+	ServiceName string
+	DefaultPort int
+}
 
+func Load(opts Options) (*Config, error) {
 	_ = godotenv.Load(".env")
 	_ = godotenv.Load("../../.env")
 
+	if opts.ServiceName == "" {
+		return nil, fmt.Errorf("config: service name is required")
+	}
+
+	envPrefix := strings.ToUpper(strings.ReplaceAll(opts.ServiceName, "-", "_"))
+	port := getEnvInt(envPrefix+"_PORT", getEnvInt("PORT", opts.DefaultPort))
+
+	if port == 0 {
+		return nil, fmt.Errorf("config: no port configured (set %s_PORT or PORT)", envPrefix)
+	}
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 
@@ -69,8 +83,8 @@ func Load() (*Config, error) {
 		Env:      getEnv("APP_ENV", "local"),
 		LogLevel: getEnv("LOG_LEVEL", "info"),
 		Service: ServiceConfig{
-			Name: getEnv("SERVICE_NAME", "unknown"),
-			Port: getEnvInt("PORT", 8080),
+			Name: opts.ServiceName,
+			Port: port,
 		},
 		Postgres: PostgresConfig{
 			Host:     getEnv("POSTGRES_HOST", "localhost"),

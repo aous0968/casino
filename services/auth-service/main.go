@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aous0968/casino/pkg/config"
+	"github.com/aous0968/casino/services/auth-service/internal/config"
 	"github.com/aous0968/casino/pkg/httpx"
 	"github.com/aous0968/casino/pkg/logger"
 	"github.com/aous0968/casino/pkg/postgres"
