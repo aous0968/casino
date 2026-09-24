@@ -75,3 +75,15 @@ migrate-auth-version:
 migrate-auth-create:
 	@if [ -z "$(NAME)" ]; then echo "NAME is required, e.g. make migrate-auth-create NAME=add_nickname"; exit 1; fi
 	migrate create -ext sql -dir migrations/auth -seq $(NAME)
+
+# ---- Migrations (wallet) ----
+WALLET_DSN ?= postgres://casino:casino@localhost:5432/casino?sslmode=disable&x-migrations-table=wallet_migrations
+
+migrate-wallet-up:
+	migrate -path migrations/wallet -database "$(WALLET_DSN)" up
+
+migrate-wallet-down:
+	migrate -path migrations/wallet -database "$(WALLET_DSN)" down 1
+
+migrate-wallet-version:
+	migrate -path migrations/wallet -database "$(WALLET_DSN)" version
