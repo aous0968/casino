@@ -11,8 +11,8 @@ import (
 
 	"github.com/aous0968/casino/pkg/httpx"
 	"github.com/aous0968/casino/services/auth-service/internal/password"
-	"github.com/aous0968/casino/services/auth-service/internal/token"
-	"github.com/aous0968/casino/services/auth-service/internal/auth"
+	"github.com/aous0968/casino/pkg/token"
+	"github.com/aous0968/casino/pkg/authmw"
 )
 
 type Handler struct {
@@ -290,7 +290,7 @@ type meResponse struct {
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
-	userID, ok := auth.UserIDFromContext(r.Context())
+	userID, ok := authmw.UserIDFromContext(r.Context())
 	if !ok {
 		// This should be impossible if the middleware is wired correctly.
 		// Log it as a programming error.

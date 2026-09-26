@@ -15,9 +15,9 @@ import (
 	"github.com/aous0968/casino/pkg/httpx"
 	"github.com/aous0968/casino/pkg/logger"
 	"github.com/aous0968/casino/pkg/postgres"
+	"github.com/aous0968/casino/pkg/token"
 	"github.com/aous0968/casino/services/auth-service/internal/user"
-	"github.com/aous0968/casino/services/auth-service/internal/token"
-	"github.com/aous0968/casino/services/auth-service/internal/auth"
+	"github.com/aous0968/casino/pkg/authmw"
 )
 
 func main() {
@@ -84,7 +84,7 @@ func run() error {
 
 	// Protected routes — wrapped in RequireAuth
 	protected := func(h http.HandlerFunc) http.Handler {
-		return auth.RequireAuth(signer, log, h)
+		return authmw.RequireAuth(signer.Verifier, log, h)
 	}
 	mux.Handle("GET /me", protected(userHandler.Me))
 

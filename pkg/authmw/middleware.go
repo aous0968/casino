@@ -1,4 +1,4 @@
-package auth
+package authmw
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/aous0968/casino/pkg/httpx"
-	"github.com/aous0968/casino/services/auth-service/internal/token"
+	"github.com/aous0968/casino/pkg/token"
 )
 
 // ctxKey is a private type used only as a context key.
@@ -29,7 +29,7 @@ func UserIDFromContext(ctx context.Context) (string, bool) {
 // RequireAuth verifies the Bearer token in the Authorization header.
 // On success, the user ID is placed in the request context and the
 // next handler is called. On failure, a 401 is returned.
-func RequireAuth(signer *token.Signer, log *slog.Logger, next http.Handler) http.Handler {
+func RequireAuth(verifier *token.Verifier, log *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
 		if header == "" {
@@ -49,7 +49,7 @@ func RequireAuth(signer *token.Signer, log *slog.Logger, next http.Handler) http
 			return
 		}
 
-		claims, err := signer.Verify(raw)
+		claims, err := verifier.Verify(raw)
 		if err != nil {
 			// Don't tell the client whether it was expired or invalid.
 			// Log it so we can debug, but return the same 401 either way.
