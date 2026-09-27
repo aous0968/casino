@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -270,4 +271,89 @@ func (r *Repo) findByKey(ctx context.Context, key string) (*TransferResult, erro
 		FromBalance:   fromBal,
 		ToBalance:     toBal,
 	}, nil
+}
+
+// GetUserAccount returns the account without creating it if missing.
+func (r *Repo) GetUserAccount(ctx context.Context, userID string) (*Account, error) {
+	const q = `
+		SELECT id, owner_type, owner_id, currency, balance
+		FROM wallet.accounts
+		WHERE owner_type = 'user' AND owner_id = $1
+	`
+	a := &Account{}
+	err := r.pool.QueryRow(ctx, q, userID).
+		Scan(&a.ID, &a.OwnerType, &a.OwnerID, &a.Currency, &a.Balance)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrAccountNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("wallet: load user account: %w", err)
+	}
+	return a, nil
+}
+
+type Entry struct {
+	ID            string
+	TransactionID string
+	Amount        int64  // signed
+	Kind          string
+	Metadata      map[string]any
+	CreatedAt     time.Time
+}
+
+// ListEntries returns the user's ledger entries, newest first.
+// If cursorTS and cursorID are non-zero/non-empty, only entries older
+// than that (created_at, id) tuple are returned. Pass limit+1 to detect
+// whether another page exists.
+func (r *Repo) ListEntries(
+	ctx context.Context,
+	accountID string,
+	limit int,
+	cursorTS time.Time,
+	cursorID string,
+) ([]Entry, error) {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	if cursorID == "" {
+		const q = `
+			SELECT le.id, le.transaction_id, le.amount, t.kind, t.metadata, le.created_at
+			FROM wallet.ledger_entries le
+			JOIN wallet.transactions t ON t.id = le.transaction_id
+			WHERE le.account_id = $1
+			ORDER BY le.created_at DESC, le.id DESC
+			LIMIT $2
+		`
+		rows, err = r.pool.Query(ctx, q, accountID, limit)
+	} else {
+		const q = `
+			SELECT le.id, le.transaction_id, le.amount, t.kind, t.metadata, le.created_at
+			FROM wallet.ledger_entries le
+			JOIN wallet.transactions t ON t.id = le.transaction_id
+			WHERE le.account_id = $1
+			  AND (le.created_at, le.id) < ($2, $3)
+			ORDER BY le.created_at DESC, le.id DESC
+			LIMIT $4
+		`
+		rows, err = r.pool.Query(ctx, q, accountID, cursorTS, cursorID, limit)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("wallet: list entries: %w", err)
+	}
+	defer rows.Close()
+
+	var out []Entry
+	for rows.Next() {
+		var e Entry
+		if err := rows.Scan(&e.ID, &e.TransactionID, &e.Amount, &e.Kind, &e.Metadata, &e.CreatedAt); err != nil {
+			return nil, fmt.Errorf("wallet: scan entry: %w", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("wallet: iterate entries: %w", err)
+	}
+	return out, nil
 }

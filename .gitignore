@@ -36,3 +36,11 @@ coverage.html
 # Local DB data / dumps
 *.sql.gz
 pgdata/
+
+
+/services/auth-service/auth-service
+/services/api-gateway/api-gateway
+/services/wallet-service/wallet-service
+/services/game-service/game-service
+/services/bonus-service/bonus-service
+/services/risk-service/risk-service
