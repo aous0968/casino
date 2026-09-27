@@ -50,7 +50,10 @@ func run() error {
 	verifier := token.NewVerifier(cfg.JWT.Secret, cfg.JWT.Issuer)
 
 	walletRepo := wallet.NewRepo(pool.Pool)
-	walletHandler := wallet.NewHandler(walletRepo, log)
+
+	walletVerifier := wallet.NewVerifier(walletRepo, log)
+	go walletVerifier.RunLoop(ctx, 5*time.Minute)
+		walletHandler := wallet.NewHandler(walletRepo, log)
 
 	mux := http.NewServeMux()
 
