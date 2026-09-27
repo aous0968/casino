@@ -73,8 +73,10 @@ func run() error {
 	protected := func(h http.HandlerFunc) http.Handler {
 		return authmw.RequireAuth(verifier, log, h)
 	}
-	mux.Handle("POST /wallet/deposit", protected(walletHandler.Deposit))
-	mux.Handle("POST /wallet/withdraw", protected(walletHandler.Withdraw))
+	mux.Handle("POST /deposit", protected(walletHandler.Deposit))
+	mux.Handle("POST /withdraw", protected(walletHandler.Withdraw))
+	mux.Handle("GET /balance", protected(walletHandler.Balance))
+	mux.Handle("GET /transactions", protected(walletHandler.Transactions))
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Service.Port),

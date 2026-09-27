@@ -51,6 +51,12 @@ func run() error {
 	}
 	mux.Handle("/auth/", stripPrefixAndProxy("/auth", authURL, log))
 
+	walletURL, err := url.Parse("http://localhost:8082")
+	if err != nil {
+		return fmt.Errorf("parse wallet url: %w", err)
+	}
+	mux.Handle("/wallet/", stripPrefixAndProxy("/wallet", walletURL, log))
+
 	srv := &http.Server{
 		Addr:              fmt.Sprintf(":%d", cfg.Service.Port),
 		Handler:           logRequests(log, mux),
