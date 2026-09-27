@@ -191,8 +191,13 @@ func insertTransaction(ctx context.Context, tx pgx.Tx, p TransferParams) (string
 		keyArg = nil
 	}
 
+	meta := p.Metadata
+	if meta == nil {
+		meta = map[string]any{}
+	}
+
 	var id string
-	err := tx.QueryRow(ctx, q, p.Kind, keyArg, p.Metadata).Scan(&id)
+	err := tx.QueryRow(ctx, q, p.Kind, keyArg, meta).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -231,7 +236,6 @@ func updateBalance(ctx context.Context, tx pgx.Tx, accountID string, delta int64
 // findByKey returns the result of a previous transfer identified by its
 // idempotency key. Reconstructs the response from the stored transaction.
 func (r *Repo) findByKey(ctx context.Context, key string) (*TransferResult, error) {
-	print(key)
 	const q = `
 		SELECT
 			t.id,
@@ -257,7 +261,6 @@ func (r *Repo) findByKey(ctx context.Context, key string) (*TransferResult, erro
 	)
 
 	err := r.pool.QueryRow(ctx, q, key).Scan(&txID, &fromBal, &toBal)
-	print(err)
 	if errors.Is(err, pgx.ErrNoRows) {
 		
 		return nil, ErrIdempotencyKeyNotFound
