@@ -85,7 +85,7 @@ func (r *Repo) Transfer(ctx context.Context, p TransferParams) (*TransferResult,
 	if p.IdempotencyKey != "" {
 		if res, err := r.findByKey(ctx, p.IdempotencyKey); err == nil {
 			return res, nil
-		} else if !errors.Is(err, ErrAccountNotFound) {
+		} else if !errors.Is(err, ErrIdempotencyKeyNotFound) {
 			return nil, err
 		}
 	}
@@ -230,6 +230,7 @@ func updateBalance(ctx context.Context, tx pgx.Tx, accountID string, delta int64
 // findByKey returns the result of a previous transfer identified by its
 // idempotency key. Reconstructs the response from the stored transaction.
 func (r *Repo) findByKey(ctx context.Context, key string) (*TransferResult, error) {
+	print(key)
 	const q = `
 		SELECT
 			t.id,
@@ -246,6 +247,7 @@ func (r *Repo) findByKey(ctx context.Context, key string) (*TransferResult, erro
 		) le_credit ON TRUE
 		WHERE t.idempotency_key = $1
 	`
+	
 
 	var (
 		txID      string
@@ -254,7 +256,9 @@ func (r *Repo) findByKey(ctx context.Context, key string) (*TransferResult, erro
 	)
 
 	err := r.pool.QueryRow(ctx, q, key).Scan(&txID, &fromBal, &toBal)
+	print(err)
 	if errors.Is(err, pgx.ErrNoRows) {
+		
 		return nil, ErrIdempotencyKeyNotFound
 	}
 	if err != nil {

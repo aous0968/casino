@@ -1,32 +1,115 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/aous0968/casino/pkg/authmw"
+	"github.com/aous0968/casino/pkg/httpx"
+	"github.com/aous0968/casino/pkg/logger"
+	"github.com/aous0968/casino/pkg/postgres"
+	"github.com/aous0968/casino/pkg/token"
+	"github.com/aous0968/casino/services/wallet-service/internal/config"
+	"github.com/aous0968/casino/services/wallet-service/internal/wallet"
 )
 
 func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
 	}
 
-	serviceName := os.Getenv("SERVICE_NAME")
-	if serviceName == "" {
-		serviceName = "unknown-service"
+	log := logger.New(cfg.LogLevel, cfg.Env).With("service", cfg.Service.Name)
+	log.Info("starting", "env", cfg.Env)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := postgres.New(ctx, cfg.Postgres.DSN(), cfg.Postgres.MaxConns)
+	if err != nil {
+		return fmt.Errorf("connect postgres: %w", err)
 	}
+	defer pool.Close()
+	log.Info("postgres connected", "host", cfg.Postgres.Host, "db", cfg.Postgres.Database)
+
+	// Wallet-service only verifies tokens, never signs them.
+	verifier := token.NewVerifier(cfg.JWT.Secret, cfg.JWT.Issuer)
+
+	walletRepo := wallet.NewRepo(pool.Pool)
+	walletHandler := wallet.NewHandler(walletRepo, log)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"status":  "ok",
-			"service": serviceName,
-		})
+
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
-	log.Printf("%s listening on :%s", serviceName, port)
-	log.Fatal(http.ListenAndServe(":"+port, mux))
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		pingCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := pool.Ping(pingCtx); err != nil {
+			log.Warn("readiness failed", "err", err)
+			httpx.WriteError(w, http.StatusServiceUnavailable, "unavailable", "postgres unreachable")
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ready"})
+	})
+
+	// Protected routes.
+	protected := func(h http.HandlerFunc) http.Handler {
+		return authmw.RequireAuth(verifier, log, h)
+	}
+	mux.Handle("POST /wallet/deposit", protected(walletHandler.Deposit))
+	mux.Handle("POST /wallet/withdraw", protected(walletHandler.Withdraw))
+
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", cfg.Service.Port),
+		Handler:           logRequests(log, mux),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Info("http listening", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		log.Info("shutdown signal received")
+	case err := <-errCh:
+		return fmt.Errorf("http server: %w", err)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
+}
+
+func logRequests(log *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Debug("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"duration_ms", time.Since(start).Milliseconds(),
+		)
+	})
 }

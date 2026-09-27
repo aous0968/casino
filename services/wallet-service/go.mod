@@ -1,4 +1,4 @@
-module github.com/yourusername/casino/services/wallet-service
+module github.com/aous0968/casino/services/wallet-service
 
 go 1.27.1
 
